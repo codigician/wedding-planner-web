@@ -84,7 +84,7 @@ interface TableSpriteProps {
 
 export const TableSprite = forwardRef<Konva.Group, TableSpriteProps>(
   function TableSprite({ table, isSelected, onSelect, onDragEnd }, ref) {
-    const { id, shape, radius, width, height, capacity, assignedGuests, tableNumber, x, y } = table
+    const { id, shape, radius, width, height, capacity, assignedGuests, tableNumber, label, x, y } = table
 
     const fill   = isSelected ? '#f0abfc' : '#e9d5ff'
     const stroke = isSelected ? '#a21caf' : '#7c3aed'
@@ -93,7 +93,7 @@ export const TableSprite = forwardRef<Konva.Group, TableSpriteProps>(
       ? { shadowEnabled: true, shadowColor: '#a21caf', shadowBlur: 10, shadowOpacity: 0.45 }
       : { shadowEnabled: false }
 
-    const numLabel   = `#${tableNumber}`
+    const numLabel   = label ? label : `#${tableNumber}`
     const countLabel = `${assignedGuests.length}/${capacity}`
 
     return (

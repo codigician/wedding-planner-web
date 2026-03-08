@@ -62,9 +62,15 @@ export function VenueFloorPlanner() {
   const [tables, setTables] = useState<VenueTable[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  const { assignGuest, statusMap } = useGuestAssignment(tables, setTables, selectedId)
+  const { assignGuest, removeGuest, statusMap } = useGuestAssignment(tables, setTables, selectedId)
 
-  // ── resize ──────────────────────────────────────────────────────────────────
+  // ── rename table ────────────────────────────────────────────────────────────
+  const handleRenameTable = useCallback((id: string, label: string) => {
+    setTables((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, label: label || undefined } : t)),
+    )
+  }, [])
+
   const handleTableResize = useCallback(
     (id: string, scaleX: number, scaleY: number, newX: number, newY: number) => {
       setTables((prev) =>
@@ -225,6 +231,8 @@ export function VenueFloorPlanner() {
           selectedTableId={selectedId}
           statusMap={statusMap}
           onAssignGuest={assignGuest}
+          onRemoveGuest={removeGuest}
+          onRenameTable={handleRenameTable}
         />
       </div>
     </div>

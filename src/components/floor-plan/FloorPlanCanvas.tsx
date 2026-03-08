@@ -84,7 +84,14 @@ export function FloorPlanCanvas({
       height={canvasHeight}
       className="rounded-lg overflow-hidden cursor-default"
       onMouseDown={(e) => {
-        if (e.target === e.target.getStage()) onSelectTable(null)
+        const parent = e.target.getParent()
+
+        // Transformer anchor handles are direct children of the Transformer node.
+        // If the user clicks one, do NOT deselect — let the resize proceed.
+        if (parent === transformerRef.current) return
+
+        const clickedInsideTable = !!parent && nodeMap.current.has(parent.id())
+        if (!clickedInsideTable) onSelectTable(null)
       }}
     >
       <Layer>

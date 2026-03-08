@@ -30,7 +30,7 @@ function makeTable(shape: TableShape, x: number, y: number): VenueTable {
 }
 
 // Seed data — replace with a real Firestore `guests` query when available.
-const MOCK_GUESTS: Guest[] = [
+const INITIAL_GUESTS: Guest[] = [
   { id: 'g1', name: 'Alice Johnson', mealPreference: 'vegetarian', rsvpStatus: 'confirmed' },
   { id: 'g2', name: 'Bob Smith', mealPreference: 'standard', rsvpStatus: 'confirmed' },
   { id: 'g3', name: 'Carol White', mealPreference: 'vegan', rsvpStatus: 'confirmed' },
@@ -61,8 +61,14 @@ export function VenueFloorPlanner() {
   const [backgroundSrc, setBackgroundSrc] = useState<string | null>(null)
   const [tables, setTables] = useState<VenueTable[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [guests, setGuests] = useState<Guest[]>(INITIAL_GUESTS)
 
   const { assignGuest, removeGuest, statusMap } = useGuestAssignment(tables, setTables, selectedId)
+
+  // ── add guest ────────────────────────────────────────────────────────────────
+  const handleAddGuest = useCallback((guest: Guest) => {
+    setGuests((prev) => [...prev, guest])
+  }, [])
 
   // ── rename table ────────────────────────────────────────────────────────────
   const handleRenameTable = useCallback((id: string, label: string) => {
@@ -233,7 +239,7 @@ export function VenueFloorPlanner() {
 
         {/* Guest sidebar */}
         <GuestSidebar
-          guests={MOCK_GUESTS}
+          guests={guests}
           tables={tables}
           selectedTableId={selectedId}
           statusMap={statusMap}
@@ -241,6 +247,7 @@ export function VenueFloorPlanner() {
           onRemoveGuest={removeGuest}
           onRenameTable={handleRenameTable}
           onUpdateCapacity={handleUpdateCapacity}
+          onAddGuest={handleAddGuest}
         />
       </div>
     </div>

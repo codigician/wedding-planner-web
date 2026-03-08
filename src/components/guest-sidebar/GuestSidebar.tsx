@@ -1,12 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, UserRound, Users, X } from 'lucide-react'
+import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import type { AssignmentStatus } from '@/hooks/useGuestAssignment'
-import type { Guest } from '@/types/guest'
+import type { Guest, MealPreference, RsvpStatus } from '@/types/guest'
 import type { VenueTable } from '@/types/venue'
 
 // ─── props ────────────────────────────────────────────────────────────────────
@@ -20,6 +30,7 @@ interface GuestSidebarProps {
   onRemoveGuest: (tableId: string, guestId: string) => void
   onRenameTable: (tableId: string, label: string) => void
   onUpdateCapacity: (tableId: string, capacity: number) => void
+  onAddGuest: (guest: Guest) => void
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -215,6 +226,111 @@ function AllGuestRow({
   )
 }
 
+// ─── add guest dialog ─────────────────────────────────────────────────────────
+
+const MEAL_OPTIONS: MealPreference[] = ['standard', 'vegetarian', 'vegan', 'halal', 'kosher', 'gluten-free']
+const RSVP_OPTIONS: RsvpStatus[] = ['confirmed', 'pending', 'declined']
+
+function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [meal, setMeal] = useState<MealPreference>('standard')
+  const [rsvp, setRsvp] = useState<RsvpStatus>('confirmed')
+
+  function reset() {
+    setName(''); setEmail(''); setMeal('standard'); setRsvp('confirmed')
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    onAdd({
+      id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: trimmed,
+      email: email.trim() || undefined,
+      mealPreference: meal,
+      rsvpStatus: rsvp,
+    })
+    reset()
+    setOpen(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset() }}>
+      <DialogTrigger
+        className="ml-1 flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Add guest"
+      >
+        <UserPlus className="size-4" />
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Add guest</DialogTitle>
+        </DialogHeader>
+        <form id="add-guest-form" onSubmit={handleSubmit} className="space-y-3 pt-1">
+          {/* Name */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor="ag-name">Name <span className="text-destructive">*</span></label>
+            <Input
+              id="ag-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name"
+              required
+              autoFocus
+            />
+          </div>
+          {/* Email */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor="ag-email">Email <span className="text-xs text-muted-foreground">(optional)</span></label>
+            <Input
+              id="ag-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="guest@example.com"
+            />
+          </div>
+          {/* Meal preference */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Meal preference</label>
+            <Select value={meal} onValueChange={(v) => setMeal(v as MealPreference)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEAL_OPTIONS.map((m) => (
+                  <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* RSVP */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium">RSVP status</label>
+            <Select value={rsvp} onValueChange={(v) => setRsvp(v as RsvpStatus)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RSVP_OPTIONS.map((r) => (
+                  <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="submit" form="add-guest-form" disabled={!name.trim()}>Add guest</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── main sidebar ─────────────────────────────────────────────────────────────
 
 export function GuestSidebar({
@@ -226,6 +342,7 @@ export function GuestSidebar({
   onRemoveGuest,
   onRenameTable,
   onUpdateCapacity,
+  onAddGuest,
 }: GuestSidebarProps) {
   const [search, setSearch] = useState('')
 
@@ -281,6 +398,7 @@ export function GuestSidebar({
         <Users className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold">Guests</h2>
         <Badge variant="outline" className="ml-auto text-xs">{totalUnseated} unseated</Badge>
+        <AddGuestDialog onAdd={onAddGuest} />
       </div>
 
       {/* ── search ── */}

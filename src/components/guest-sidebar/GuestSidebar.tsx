@@ -378,9 +378,9 @@ export function GuestSidebar({
 
   function getRowState(guest: Guest): GuestRowState {
     const assignedTo = guestTableMap.get(guest.id)
+    if (assignedTo) return 'other-table'          // always show table badge if assigned
     if (!selectedTable) return 'no-table-selected'
-    if (assignedTo) return 'other-table'
-    if (isFull) return 'no-table-selected' // disable add when full
+    if (isFull) return 'no-table-selected'         // disable add when full
     return 'addable'
   }
 

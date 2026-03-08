@@ -71,6 +71,13 @@ export function VenueFloorPlanner() {
     )
   }, [])
 
+  // ── update capacity ─────────────────────────────────────────────────────────
+  const handleUpdateCapacity = useCallback((id: string, capacity: number) => {
+    setTables((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, capacity } : t)),
+    )
+  }, [])
+
   const handleTableResize = useCallback(
     (id: string, scaleX: number, scaleY: number, newX: number, newY: number) => {
       setTables((prev) =>
@@ -233,6 +240,7 @@ export function VenueFloorPlanner() {
           onAssignGuest={assignGuest}
           onRemoveGuest={removeGuest}
           onRenameTable={handleRenameTable}
+          onUpdateCapacity={handleUpdateCapacity}
         />
       </div>
     </div>

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, Loader2, Pencil, UserRound, Users, X } from 'lucide-react'
+import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, UserRound, Users, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -10,7 +9,7 @@ import type { AssignmentStatus } from '@/hooks/useGuestAssignment'
 import type { Guest } from '@/types/guest'
 import type { VenueTable } from '@/types/venue'
 
-// ─── types ────────────────────────────────────────────────────────────────────
+// ─── props ────────────────────────────────────────────────────────────────────
 
 interface GuestSidebarProps {
   guests: Guest[]
@@ -20,42 +19,25 @@ interface GuestSidebarProps {
   onAssignGuest: (guestId: string) => void
   onRemoveGuest: (tableId: string, guestId: string) => void
   onRenameTable: (tableId: string, label: string) => void
+  onUpdateCapacity: (tableId: string, capacity: number) => void
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+function initials(name: string) {
+  return name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
 }
 
 // ─── table name editor ────────────────────────────────────────────────────────
 
-function TableNameEditor({
-  table,
-  onRename,
-}: {
-  table: VenueTable
-  onRename: (label: string) => void
-}) {
+function TableNameEditor({ table, onRename }: { table: VenueTable; onRename: (l: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(table.label ?? '')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Sync draft if the table label changes externally
-  useEffect(() => {
-    if (!editing) setDraft(table.label ?? '')
-  }, [table.label, editing])
+  useEffect(() => { if (!editing) setDraft(table.label ?? '') }, [table.label, editing])
 
-  function startEdit() {
-    setDraft(table.label ?? '')
-    setEditing(true)
-    setTimeout(() => inputRef.current?.select(), 0)
-  }
-
-  function commit() {
-    const trimmed = draft.trim()
-    onRename(trimmed)
-    setEditing(false)
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') commit()
-    if (e.key === 'Escape') setEditing(false)
-  }
+  function commit() { onRename(draft.trim()); setEditing(false) }
 
   if (editing) {
     return (
@@ -64,7 +46,7 @@ function TableNameEditor({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
         placeholder={`Table ${table.tableNumber}`}
         className="h-7 text-sm font-semibold"
         autoFocus
@@ -73,12 +55,9 @@ function TableNameEditor({
   }
 
   return (
-    <button
-      type="button"
-      onClick={startEdit}
-      className="group flex items-center gap-1.5 text-left"
-    >
-      <span className="text-sm font-semibold leading-tight">
+    <button type="button" onClick={() => { setDraft(table.label ?? ''); setEditing(true) }}
+      className="group flex items-center gap-1.5 text-left min-w-0">
+      <span className="truncate text-sm font-semibold">
         {table.label || `Table ${table.tableNumber}`}
       </span>
       <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
@@ -86,23 +65,80 @@ function TableNameEditor({
   )
 }
 
-// ─── seated guest row ─────────────────────────────────────────────────────────
+// ─── capacity editor ──────────────────────────────────────────────────────────
+
+function CapacityEditor({
+  table,
+  onUpdate,
+}: {
+  table: VenueTable
+  onUpdate: (capacity: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(table.capacity))
+  const min = table.assignedGuests.length  // can't shrink below seated count
+
+  useEffect(() => { if (!editing) setDraft(String(table.capacity)) }, [table.capacity, editing])
+
+  function commit(raw: string) {
+    const n = parseInt(raw, 10)
+    if (!isNaN(n)) onUpdate(Math.max(min, n))
+    setEditing(false)
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button
+        type="button"
+        aria-label="Decrease capacity"
+        disabled={table.capacity <= min}
+        onClick={() => onUpdate(Math.max(min, table.capacity - 1))}
+        className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:pointer-events-none"
+      >
+        <Minus className="size-3" />
+      </button>
+
+      {editing ? (
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => commit(draft)}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit(draft); if (e.key === 'Escape') setEditing(false) }}
+          className="h-5 w-8 px-0 text-center text-xs font-mono"
+          autoFocus
+        />
+      ) : (
+        <button
+          type="button"
+          aria-label="Edit capacity"
+          onClick={() => { setDraft(String(table.capacity)); setEditing(true) }}
+          className="w-8 text-center text-xs font-mono font-semibold hover:underline"
+        >
+          {table.capacity}
+        </button>
+      )}
+
+      <button
+        type="button"
+        aria-label="Increase capacity"
+        onClick={() => onUpdate(table.capacity + 1)}
+        className="flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Plus className="size-3" />
+      </button>
+    </div>
+  )
+}
+
+// ─── seated guest row (inside table panel) ────────────────────────────────────
 
 function SeatedGuestRow({
-  guest,
-  tableId,
-  status,
-  onRemove,
-}: {
-  guest: Guest
-  tableId: string
-  status: AssignmentStatus
-  onRemove: (tableId: string, guestId: string) => void
-}) {
+  guest, tableId, status, onRemove,
+}: { guest: Guest; tableId: string; status: AssignmentStatus; onRemove: (t: string, g: string) => void }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40 group">
+    <div className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40">
       <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-        {guest.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+        {initials(guest.name)}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium leading-tight">{guest.name}</p>
@@ -112,55 +148,69 @@ function SeatedGuestRow({
       </div>
       {status === 'loading' && <Loader2 className="size-3.5 shrink-0 animate-spin text-purple-500" />}
       {status === 'error'   && <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-label="Failed" />}
-      <button
-        type="button"
-        aria-label={`Remove ${guest.name}`}
-        onClick={() => onRemove(tableId, guest.id)}
-        className="size-5 shrink-0 flex items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-      >
+      <button type="button" aria-label={`Remove ${guest.name}`} onClick={() => onRemove(tableId, guest.id)}
+        className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100">
         <X className="size-3.5" />
       </button>
     </div>
   )
 }
 
-// ─── unassigned guest row ─────────────────────────────────────────────────────
+// ─── all-guests row (filtered list) ───────────────────────────────────────────
 
-function UnassignedGuestRow({
-  guest,
-  isSelectable,
-  status,
-  onClick,
+type GuestRowState = 'addable' | 'at-table' | 'other-table' | 'no-table-selected'
+
+function AllGuestRow({
+  guest, rowState, tableLabel, status, onAdd,
 }: {
   guest: Guest
-  isSelectable: boolean
+  rowState: GuestRowState
+  tableLabel: string
   status: AssignmentStatus
-  onClick: () => void
+  onAdd: () => void
 }) {
+  const isLoading = status === 'loading'
+  const isError   = status === 'error'
+
   return (
     <button
       type="button"
-      disabled={!isSelectable || status === 'loading'}
-      onClick={onClick}
+      disabled={rowState !== 'addable' || isLoading}
+      onClick={rowState === 'addable' ? onAdd : undefined}
       className={cn(
-        'w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors',
-        'disabled:cursor-not-allowed disabled:opacity-60',
-        isSelectable
-          ? 'hover:bg-purple-50 dark:hover:bg-purple-950/20 cursor-pointer'
-          : 'cursor-default',
+        'w-full flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors',
+        rowState === 'addable'   && 'hover:bg-purple-50 dark:hover:bg-purple-950/20 cursor-pointer',
+        rowState !== 'addable'   && 'cursor-default',
+        (rowState === 'at-table' || rowState === 'other-table') && 'opacity-50',
       )}
     >
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-        {guest.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+      {/* Avatar */}
+      <span className={cn(
+        'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+        rowState === 'addable'
+          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+          : 'bg-muted text-muted-foreground',
+      )}>
+        {initials(guest.name)}
       </span>
+
+      {/* Name + detail */}
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium leading-tight">{guest.name}</p>
         {guest.mealPreference && (
           <p className="truncate text-xs capitalize text-muted-foreground">{guest.mealPreference}</p>
         )}
       </div>
-      {status === 'loading' && <Loader2 className="size-3.5 shrink-0 animate-spin text-purple-500" />}
-      {status === 'error'   && <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-label="Failed" />}
+
+      {/* Right badge / icon */}
+      {isLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-purple-500" />}
+      {isError   && <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-label="Failed" />}
+      {!isLoading && !isError && rowState === 'at-table' && (
+        <Badge variant="secondary" className="shrink-0 text-xs">Here</Badge>
+      )}
+      {!isLoading && !isError && rowState === 'other-table' && (
+        <Badge variant="outline" className="shrink-0 truncate max-w-[5rem] text-xs">{tableLabel}</Badge>
+      )}
     </button>
   )
 }
@@ -175,148 +225,172 @@ export function GuestSidebar({
   onAssignGuest,
   onRemoveGuest,
   onRenameTable,
+  onUpdateCapacity,
 }: GuestSidebarProps) {
+  const [search, setSearch] = useState('')
+
   const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null
 
-  const assignedIds = new Set(tables.flatMap((t) => t.assignedGuests))
-  const unassigned = guests.filter((g) => !assignedIds.has(g.id))
-
-  const seatedGuests = selectedTable
-    ? selectedTable.assignedGuests
-        .map((id) => guests.find((g) => g.id === id))
-        .filter((g): g is Guest => g !== undefined)
-    : []
+  // Build a map: guestId → table it's assigned to
+  const guestTableMap = new Map<string, VenueTable>()
+  for (const t of tables) {
+    for (const gid of t.assignedGuests) guestTableMap.set(gid, t)
+  }
 
   const isFull = selectedTable != null &&
     selectedTable.assignedGuests.length >= selectedTable.capacity
+  const seatsLeft = selectedTable ? selectedTable.capacity - selectedTable.assignedGuests.length : 0
 
-  const seatsLeft = selectedTable
-    ? selectedTable.capacity - selectedTable.assignedGuests.length
-    : 0
+  // Guests seated at the selected table (for the detail panel)
+  const seatedGuests = selectedTable
+    ? selectedTable.assignedGuests
+        .map((id) => guests.find((g) => g.id === id))
+        .filter((g): g is Guest => Boolean(g))
+    : []
+
+  // Filtered guest list for the search section
+  const query = search.trim().toLowerCase()
+  const filtered = guests.filter((g) =>
+    !query || g.name.toLowerCase().includes(query),
+  )
+
+  // Guests NOT already seated at the selected table (to avoid duplication)
+  const listGuests = selectedTable
+    ? filtered.filter((g) => !selectedTable.assignedGuests.includes(g.id))
+    : filtered
+
+  function getRowState(guest: Guest): GuestRowState {
+    const assignedTo = guestTableMap.get(guest.id)
+    if (!selectedTable) return 'no-table-selected'
+    if (assignedTo) return 'other-table'
+    if (isFull) return 'no-table-selected' // disable add when full
+    return 'addable'
+  }
+
+  function tableLabel(t: VenueTable) {
+    return t.label ? t.label : `Table ${t.tableNumber}`
+  }
+
+  const totalUnseated = guests.filter((g) => !guestTableMap.has(g.id)).length
 
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+
       {/* ── header ── */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Users className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold">Guests</h2>
-        <Badge variant="outline" className="ml-auto text-xs">
-          {guests.length - assignedIds.size} unseated
-        </Badge>
+        <Badge variant="outline" className="ml-auto text-xs">{totalUnseated} unseated</Badge>
+      </div>
+
+      {/* ── search ── */}
+      <div className="border-b border-border px-3 py-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search guests…"
+            className="h-8 pl-7 text-sm"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
 
-        {/* ── table detail panel (only when a table is selected) ── */}
+        {/* ── selected table panel ── */}
         {selectedTable && (
           <div className="px-3 pt-3 pb-2 space-y-2">
-            {/* Table name + capacity bar */}
-            <div className="flex items-center justify-between gap-2">
+
+            {/* Name + capacity row */}
+            <div className="flex items-center gap-2">
               <TableNameEditor
                 table={selectedTable}
-                onRename={(label) => onRenameTable(selectedTable.id, label)}
+                onRename={(l) => onRenameTable(selectedTable.id, l)}
               />
-              <Badge
-                variant="outline"
-                className={cn('shrink-0 text-xs font-mono', isFull && 'border-destructive text-destructive')}
-              >
-                {selectedTable.assignedGuests.length}/{selectedTable.capacity}
-              </Badge>
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {selectedTable.assignedGuests.length}/
+                </span>
+                <CapacityEditor
+                  table={selectedTable}
+                  onUpdate={(cap) => onUpdateCapacity(selectedTable.id, cap)}
+                />
+              </div>
             </div>
 
-            {/* Capacity progress bar */}
+            {/* Progress bar */}
             <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
               <div
-                className={cn(
-                  'h-full rounded-full transition-all',
-                  isFull ? 'bg-destructive' : 'bg-purple-500',
-                )}
+                className={cn('h-full rounded-full transition-all', isFull ? 'bg-destructive' : 'bg-purple-500')}
                 style={{ width: `${Math.min(100, (selectedTable.assignedGuests.length / selectedTable.capacity) * 100)}%` }}
               />
             </div>
 
-            {/* Seated guest list */}
+            {/* Seated list */}
             {seatedGuests.length > 0 ? (
-              <div className="space-y-0.5 pt-1">
-                {seatedGuests.map((guest) => (
-                  <SeatedGuestRow
-                    key={guest.id}
-                    guest={guest}
-                    tableId={selectedTable.id}
-                    status={statusMap[guest.id] ?? 'idle'}
-                    onRemove={onRemoveGuest}
-                  />
+              <div className="space-y-0.5 pt-0.5">
+                {seatedGuests.map((g) => (
+                  <SeatedGuestRow key={g.id} guest={g} tableId={selectedTable.id}
+                    status={statusMap[g.id] ?? 'idle'} onRemove={onRemoveGuest} />
                 ))}
               </div>
             ) : (
-              <p className="py-2 text-center text-xs text-muted-foreground">
-                No guests seated yet
-              </p>
+              <p className="py-1.5 text-center text-xs text-muted-foreground">No guests seated yet</p>
             )}
 
-            <Separator className="mt-1" />
+            <Separator />
 
-            {/* Prompt */}
-            <p className={cn(
-              'text-xs',
-              isFull ? 'text-destructive' : 'text-purple-600 dark:text-purple-400',
-            )}>
-              {isFull
-                ? 'Table is full'
-                : `${seatsLeft} seat${seatsLeft !== 1 ? 's' : ''} available — click a guest below to seat them`}
+            <p className={cn('text-xs', isFull ? 'text-destructive' : 'text-purple-600 dark:text-purple-400')}>
+              {isFull ? 'Table is full' : `${seatsLeft} seat${seatsLeft !== 1 ? 's' : ''} free — click a guest below`}
             </p>
           </div>
         )}
 
-        {/* ── unassigned guests ── */}
+        {/* ── all guests list ── */}
         <section className="px-2 pb-3">
-          {!selectedTable && (
-            <div className="flex items-center gap-1.5 px-2 py-2">
-              <UserRound className="size-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Unassigned guests
-              </span>
-            </div>
-          )}
+          {/* Section header */}
+          <div className="flex items-center gap-1.5 px-2 py-2">
+            <UserRound className="size-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {query ? `Results (${listGuests.length})` : 'All guests'}
+            </span>
+          </div>
 
-          {!selectedTable && (
+          {!selectedTable && !query && (
             <p className="px-2 pb-2 text-xs text-muted-foreground">
-              Select a table on the canvas to start seating guests
+              Select a table on the canvas, then click a guest to seat them
             </p>
           )}
 
-          {unassigned.length === 0 ? (
+          {listGuests.length === 0 ? (
             <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-              All guests have been seated 🎉
+              {query ? 'No guests match your search' : 'All guests are seated 🎉'}
             </p>
           ) : (
-            unassigned.map((guest) => (
-              <UnassignedGuestRow
-                key={guest.id}
-                guest={guest}
-                isSelectable={!!selectedTable && !isFull}
-                status={statusMap[guest.id] ?? 'idle'}
-                onClick={() => onAssignGuest(guest.id)}
-              />
-            ))
+            listGuests.map((guest) => {
+              const assignedTo = guestTableMap.get(guest.id)
+              return (
+                <AllGuestRow
+                  key={guest.id}
+                  guest={guest}
+                  rowState={getRowState(guest)}
+                  tableLabel={assignedTo ? tableLabel(assignedTo) : ''}
+                  status={statusMap[guest.id] ?? 'idle'}
+                  onAdd={() => onAssignGuest(guest.id)}
+                />
+              )
+            })
           )}
         </section>
 
       </ScrollArea>
-
-      {/* ── deselect hint ── */}
-      {selectedTable && (
-        <div className="border-t border-border px-4 py-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs text-muted-foreground"
-            onClick={() => {/* parent controls selection */}}
-          >
-            Click canvas to deselect table
-          </Button>
-        </div>
-      )}
     </aside>
   )
 }

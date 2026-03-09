@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -390,6 +391,27 @@ export function GuestSidebar({
 
   const totalUnseated = guests.filter((g) => !guestTableMap.has(g.id)).length
 
+  // Build grouped structure for the guest list
+  const tableGroupMap = new Map<string, { table: VenueTable; guests: Guest[] }>()
+  const unassignedGuests: Guest[] = []
+
+  for (const guest of listGuests) {
+    const assignedTo = guestTableMap.get(guest.id)
+    if (assignedTo) {
+      if (!tableGroupMap.has(assignedTo.id)) {
+        tableGroupMap.set(assignedTo.id, { table: assignedTo, guests: [] })
+      }
+      tableGroupMap.get(assignedTo.id)!.guests.push(guest)
+    } else {
+      unassignedGuests.push(guest)
+    }
+  }
+
+  // Sort table groups by tableNumber for consistent ordering
+  const sortedTableGroups = Array.from(tableGroupMap.values()).sort(
+    (a, b) => Number(a.table.tableNumber) - Number(b.table.tableNumber),
+  )
+
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm overflow-hidden">
 
@@ -471,7 +493,7 @@ export function GuestSidebar({
           </div>
         )}
 
-        {/* ── all guests list ── */}
+        {/* ── all guests list (grouped by table) ── */}
         <section className="px-2 pb-3">
           {/* Section header */}
           <div className="flex items-center gap-1.5 px-2 py-2">
@@ -492,19 +514,61 @@ export function GuestSidebar({
               {query ? 'No guests match your search' : 'All guests are seated 🎉'}
             </p>
           ) : (
-            listGuests.map((guest) => {
-              const assignedTo = guestTableMap.get(guest.id)
-              return (
-                <AllGuestRow
-                  key={guest.id}
-                  guest={guest}
-                  rowState={getRowState(guest)}
-                  tableLabel={assignedTo ? tableLabel(assignedTo) : ''}
-                  status={statusMap[guest.id] ?? 'idle'}
-                  onAdd={() => onAssignGuest(guest.id)}
-                />
-              )
-            })
+            <Accordion
+              defaultValue={[
+                ...sortedTableGroups.map(({ table: t }) => t.id),
+                'unassigned',
+              ]}
+              className="space-y-0.5"
+            >
+              {/* Assigned groups */}
+              {sortedTableGroups.map(({ table: t, guests: tGuests }) => (
+                <AccordionItem key={t.id} value={t.id} className="border-0">
+                  <AccordionTrigger className="rounded-md px-2 py-1.5 text-xs font-semibold hover:bg-muted/60 hover:no-underline [&>svg]:size-3.5">
+                    <span className="truncate">{tableLabel(t)}</span>
+                    <span className="ml-auto mr-1.5 shrink-0 tabular-nums text-muted-foreground">
+                      {t.assignedGuests.length}/{t.capacity}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-1 pt-0 [&_p]:!mb-0">
+                    {tGuests.map((guest) => (
+                      <AllGuestRow
+                        key={guest.id}
+                        guest={guest}
+                        rowState={getRowState(guest)}
+                        tableLabel=""
+                        status={statusMap[guest.id] ?? 'idle'}
+                        onAdd={() => onAssignGuest(guest.id)}
+                      />
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+
+              {/* Unassigned group */}
+              {unassignedGuests.length > 0 && (
+                <AccordionItem value="unassigned" className="border-0">
+                  <AccordionTrigger className="rounded-md px-2 py-1.5 text-xs font-semibold hover:bg-muted/60 hover:no-underline [&>svg]:size-3.5">
+                    <span className="truncate">Unassigned</span>
+                    <span className="ml-auto mr-1.5 shrink-0 tabular-nums text-muted-foreground">
+                      {unassignedGuests.length}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-1 pt-0 [&_p]:!mb-0">
+                    {unassignedGuests.map((guest) => (
+                      <AllGuestRow
+                        key={guest.id}
+                        guest={guest}
+                        rowState={getRowState(guest)}
+                        tableLabel=""
+                        status={statusMap[guest.id] ?? 'idle'}
+                        onAdd={() => onAssignGuest(guest.id)}
+                      />
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+            </Accordion>
           )}
         </section>
 

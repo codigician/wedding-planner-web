@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,9 @@ interface GuestSidebarProps {
   onRemoveGuest: (tableId: string, guestId: string) => void
   onRenameTable: (tableId: string, label: string) => void
   onUpdateCapacity: (tableId: string, capacity: number) => void
-  onAddGuest: (guest: Guest) => void
+  onAddGuest: (guest: Guest) => void | Promise<void>
+  onEditGuest: (guestId: string, data: Omit<Guest, 'id'>) => void | Promise<void>
+  onDeleteGuest: (guestId: string) => void | Promise<void>
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -173,57 +175,82 @@ function SeatedGuestRow({
 type GuestRowState = 'addable' | 'at-table' | 'other-table' | 'no-table-selected'
 
 function AllGuestRow({
-  guest, rowState, tableLabel, status, onAdd,
+  guest, rowState, tableLabel, status, onAdd, onEdit, onDelete,
 }: {
   guest: Guest
   rowState: GuestRowState
   tableLabel: string
   status: AssignmentStatus
   onAdd: () => void
+  onEdit: () => void
+  onDelete: () => void
 }) {
   const isLoading = status === 'loading'
   const isError   = status === 'error'
 
   return (
-    <button
-      type="button"
-      disabled={rowState !== 'addable' || isLoading}
-      onClick={rowState === 'addable' ? onAdd : undefined}
-      className={cn(
-        'w-full flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors',
-        rowState === 'addable'   && 'hover:bg-purple-50 dark:hover:bg-purple-950/20 cursor-pointer',
-        rowState !== 'addable'   && 'cursor-default',
-        (rowState === 'at-table' || rowState === 'other-table') && 'opacity-50',
-      )}
-    >
-      {/* Avatar */}
-      <span className={cn(
-        'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-        rowState === 'addable'
-          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
-          : 'bg-muted text-muted-foreground',
-      )}>
-        {initials(guest.name)}
-      </span>
-
-      {/* Name + detail */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium leading-tight">{guest.name}</p>
-        {guest.mealPreference && (
-          <p className="truncate text-xs capitalize text-muted-foreground">{guest.mealPreference}</p>
+    <div className="group relative flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-muted/60">
+      {/* Clickable assign area */}
+      <button
+        type="button"
+        disabled={rowState !== 'addable' || isLoading}
+        onClick={rowState === 'addable' ? onAdd : undefined}
+        className={cn(
+          'flex flex-1 items-center gap-2.5 text-left min-w-0',
+          rowState === 'addable' && !isLoading ? 'cursor-pointer' : 'cursor-default',
+          (rowState === 'at-table' || rowState === 'other-table') && 'opacity-50',
         )}
-      </div>
+        tabIndex={rowState === 'addable' ? 0 : -1}
+      >
+        {/* Avatar */}
+        <span className={cn(
+          'flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+          rowState === 'addable'
+            ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+            : 'bg-muted text-muted-foreground',
+        )}>
+          {initials(guest.name)}
+        </span>
 
-      {/* Right badge / icon */}
-      {isLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-purple-500" />}
-      {isError   && <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-label="Failed" />}
-      {!isLoading && !isError && rowState === 'at-table' && (
-        <Badge variant="secondary" className="shrink-0 text-xs">Here</Badge>
-      )}
-      {!isLoading && !isError && rowState === 'other-table' && (
-        <Badge variant="outline" className="shrink-0 truncate max-w-[5rem] text-xs">{tableLabel}</Badge>
-      )}
-    </button>
+        {/* Name + detail */}
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium leading-tight">{guest.name}</p>
+          {guest.mealPreference && (
+            <p className="truncate text-xs capitalize text-muted-foreground">{guest.mealPreference}</p>
+          )}
+        </div>
+
+        {/* Status / badge */}
+        {isLoading && <Loader2 className="size-3.5 shrink-0 animate-spin text-purple-500" />}
+        {isError   && <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-label="Failed" />}
+        {!isLoading && !isError && rowState === 'at-table' && (
+          <Badge variant="secondary" className="shrink-0 text-xs">Here</Badge>
+        )}
+        {!isLoading && !isError && rowState === 'other-table' && (
+          <Badge variant="outline" className="shrink-0 truncate max-w-[5rem] text-xs">{tableLabel}</Badge>
+        )}
+      </button>
+
+      {/* Edit + delete actions (visible on row hover) */}
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          aria-label={`Edit ${guest.name}`}
+          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <Pencil className="size-3" />
+        </button>
+        <button
+          type="button"
+          aria-label={`Delete ${guest.name}`}
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+        >
+          <Trash2 className="size-3" />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -232,30 +259,40 @@ function AllGuestRow({
 const MEAL_OPTIONS: MealPreference[] = ['standard', 'vegetarian', 'vegan', 'halal', 'kosher', 'gluten-free']
 const RSVP_OPTIONS: RsvpStatus[] = ['confirmed', 'pending', 'declined']
 
-function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
+function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void | Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [meal, setMeal] = useState<MealPreference>('standard')
   const [rsvp, setRsvp] = useState<RsvpStatus>('confirmed')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   function reset() {
-    setName(''); setEmail(''); setMeal('standard'); setRsvp('confirmed')
+    setName(''); setEmail(''); setMeal('standard'); setRsvp('confirmed'); setError('')
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) return
-    onAdd({
-      id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: trimmed,
-      email: email.trim() || undefined,
-      mealPreference: meal,
-      rsvpStatus: rsvp,
-    })
-    reset()
-    setOpen(false)
+    setSaving(true)
+    setError('')
+    try {
+      await onAdd({
+        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: trimmed,
+        email: email.trim() || undefined,
+        mealPreference: meal,
+        rsvpStatus: rsvp,
+      })
+      reset()
+      setOpen(false)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to add guest.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -281,6 +318,7 @@ function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
               placeholder="Full name"
               required
               autoFocus
+              disabled={saving}
             />
           </div>
           {/* Email */}
@@ -292,12 +330,13 @@ function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="guest@example.com"
+              disabled={saving}
             />
           </div>
           {/* Meal preference */}
           <div className="space-y-1">
             <label className="text-sm font-medium">Meal preference</label>
-            <Select value={meal} onValueChange={(v) => setMeal(v as MealPreference)}>
+            <Select value={meal} onValueChange={(v) => setMeal(v as MealPreference)} disabled={saving}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -311,7 +350,7 @@ function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
           {/* RSVP */}
           <div className="space-y-1">
             <label className="text-sm font-medium">RSVP status</label>
-            <Select value={rsvp} onValueChange={(v) => setRsvp(v as RsvpStatus)}>
+            <Select value={rsvp} onValueChange={(v) => setRsvp(v as RsvpStatus)} disabled={saving}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -322,10 +361,160 @@ function AddGuestDialog({ onAdd }: { onAdd: (guest: Guest) => void }) {
               </SelectContent>
             </Select>
           </div>
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg px-3 py-2">{error}</p>
+          )}
         </form>
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="submit" form="add-guest-form" disabled={!name.trim()}>Add guest</Button>
+          <Button variant="outline" type="button" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+          <Button type="submit" form="add-guest-form" disabled={!name.trim() || saving}>
+            {saving ? 'Adding…' : 'Add guest'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── edit guest dialog ────────────────────────────────────────────────────────
+
+function EditGuestDialog({
+  guest,
+  open,
+  onClose,
+  onSave,
+}: {
+  guest: Guest
+  open: boolean
+  onClose: () => void
+  onSave: (guestId: string, data: Omit<Guest, 'id'>) => void | Promise<void>
+}) {
+  const [name, setName] = useState(guest.name)
+  const [email, setEmail] = useState(guest.email ?? '')
+  const [meal, setMeal] = useState<MealPreference>(guest.mealPreference ?? 'standard')
+  const [rsvp, setRsvp] = useState<RsvpStatus>(guest.rsvpStatus)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Sync fields when guest prop changes (e.g. different guest opened)
+  useEffect(() => {
+    setName(guest.name)
+    setEmail(guest.email ?? '')
+    setMeal(guest.mealPreference ?? 'standard')
+    setRsvp(guest.rsvpStatus)
+    setError('')
+  }, [guest])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    setError('')
+    try {
+      await onSave(guest.id, {
+        name: trimmed,
+        email: email.trim() || undefined,
+        mealPreference: meal,
+        rsvpStatus: rsvp,
+      })
+      onClose()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit guest</DialogTitle>
+        </DialogHeader>
+        <form id="edit-guest-form" onSubmit={handleSubmit} className="space-y-3 pt-1">
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor="eg-name">Name <span className="text-destructive">*</span></label>
+            <Input id="eg-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" required autoFocus disabled={saving} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor="eg-email">Email <span className="text-xs text-muted-foreground">(optional)</span></label>
+            <Input id="eg-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="guest@example.com" disabled={saving} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Meal preference</label>
+            <Select value={meal} onValueChange={(v) => setMeal(v as MealPreference)} disabled={saving}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MEAL_OPTIONS.map((m) => <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">RSVP status</label>
+            <Select value={rsvp} onValueChange={(v) => setRsvp(v as RsvpStatus)} disabled={saving}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {RSVP_OPTIONS.map((r) => <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg px-3 py-2">{error}</p>}
+        </form>
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="submit" form="edit-guest-form" disabled={!name.trim() || saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── delete guest confirm dialog ─────────────────────────────────────────────
+
+function DeleteGuestDialog({
+  guest,
+  open,
+  onClose,
+  onConfirm,
+}: {
+  guest: Guest
+  open: boolean
+  onClose: () => void
+  onConfirm: (guestId: string) => void | Promise<void>
+}) {
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleDelete() {
+    setDeleting(true)
+    setError('')
+    try {
+      await onConfirm(guest.id)
+      onClose()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete guest.')
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+      <DialogContent className="sm:max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Delete guest?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          <strong className="text-foreground">{guest.name}</strong> will be permanently removed. This cannot be undone.
+        </p>
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={deleting}>Cancel</Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -344,8 +533,12 @@ export function GuestSidebar({
   onRenameTable,
   onUpdateCapacity,
   onAddGuest,
+  onEditGuest,
+  onDeleteGuest,
 }: GuestSidebarProps) {
   const [search, setSearch] = useState('')
+  const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
+  const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null)
 
   const selectedTable = tables.find((t) => t.id === selectedTableId) ?? null
 
@@ -442,7 +635,7 @@ export function GuestSidebar({
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
 
         {/* ── selected table panel ── */}
         {selectedTable && (
@@ -539,6 +732,8 @@ export function GuestSidebar({
                         tableLabel=""
                         status={statusMap[guest.id] ?? 'idle'}
                         onAdd={() => onAssignGuest(guest.id)}
+                        onEdit={() => setEditingGuest(guest)}
+                        onDelete={() => setDeletingGuest(guest)}
                       />
                     ))}
                   </AccordionContent>
@@ -563,6 +758,8 @@ export function GuestSidebar({
                         tableLabel=""
                         status={statusMap[guest.id] ?? 'idle'}
                         onAdd={() => onAssignGuest(guest.id)}
+                        onEdit={() => setEditingGuest(guest)}
+                        onDelete={() => setDeletingGuest(guest)}
                       />
                     ))}
                   </AccordionContent>
@@ -573,6 +770,24 @@ export function GuestSidebar({
         </section>
 
       </ScrollArea>
+
+      {/* Edit + delete dialogs (rendered outside the scroll area) */}
+      {editingGuest && (
+        <EditGuestDialog
+          guest={editingGuest}
+          open={true}
+          onClose={() => setEditingGuest(null)}
+          onSave={onEditGuest}
+        />
+      )}
+      {deletingGuest && (
+        <DeleteGuestDialog
+          guest={deletingGuest}
+          open={true}
+          onClose={() => setDeletingGuest(null)}
+          onConfirm={onDeleteGuest}
+        />
+      )}
     </aside>
   )
 }

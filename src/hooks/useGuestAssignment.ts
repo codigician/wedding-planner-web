@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { tableDb } from '@/lib/db'
+import { updateEventTables } from '@/lib/firebase/events'
 import type { VenueTable } from '@/types/venue'
 
 export type AssignmentStatus = 'idle' | 'loading' | 'error'
@@ -14,17 +14,14 @@ interface UseGuestAssignmentReturn {
 }
 
 /**
- * Manages guest-to-table assignments.
+ * Manages guest-to-table assignments with Firestore persistence.
  *
  * Applies an **optimistic local update** immediately so the UI feels instant,
- * then persists the change to Firestore. If Firestore throws, the local state
- * is rolled back and the guest's status is set to `'error'`.
- *
- * @param tables       - Current tables state array.
- * @param setTables    - State setter for the tables array.
- * @param selectedTableId - The currently selected table's ID (may be null).
+ * then persists the full updated tables array to the event document.
+ * If the write fails, the local state is rolled back.
  */
 export function useGuestAssignment(
+  eventId: string,
   tables: VenueTable[],
   setTables: React.Dispatch<React.SetStateAction<VenueTable[]>>,
   selectedTableId: string | null,
@@ -38,49 +35,42 @@ export function useGuestAssignment(
     async (guestId: string) => {
       if (!selectedTableId) return
 
-      // Snapshot for rollback
       const snapshot = tables
-
-      // 1. Optimistic update
-      setTables((prev) =>
-        prev.map((t) =>
-          t.id === selectedTableId && !t.assignedGuests.includes(guestId)
-            ? { ...t, assignedGuests: [...t.assignedGuests, guestId] }
-            : t,
-        ),
+      const updated = tables.map((t) =>
+        t.id === selectedTableId && !t.assignedGuests.includes(guestId)
+          ? { ...t, assignedGuests: [...t.assignedGuests, guestId] }
+          : t,
       )
+
+      setTables(updated)
       setGuestStatus(guestId, 'loading')
 
-      // 2. Persist to db
       try {
-        await tableDb.assignGuestToTable(selectedTableId, guestId)
+        await updateEventTables(eventId, updated)
         setGuestStatus(guestId, 'idle')
       } catch (err) {
         console.error('[useGuestAssignment] assignGuest failed:', err)
-        // Rollback
         setTables(snapshot)
         setGuestStatus(guestId, 'error')
       }
     },
-    [selectedTableId, tables, setTables],
+    [eventId, selectedTableId, tables, setTables],
   )
 
   const removeGuest = useCallback(
     async (tableId: string, guestId: string) => {
       const snapshot = tables
-
-      // Optimistic update
-      setTables((prev) =>
-        prev.map((t) =>
-          t.id === tableId
-            ? { ...t, assignedGuests: t.assignedGuests.filter((id) => id !== guestId) }
-            : t,
-        ),
+      const updated = tables.map((t) =>
+        t.id === tableId
+          ? { ...t, assignedGuests: t.assignedGuests.filter((id) => id !== guestId) }
+          : t,
       )
+
+      setTables(updated)
       setGuestStatus(guestId, 'loading')
 
       try {
-        await tableDb.removeGuestFromTable(tableId, guestId)
+        await updateEventTables(eventId, updated)
         setGuestStatus(guestId, 'idle')
       } catch (err) {
         console.error('[useGuestAssignment] removeGuest failed:', err)
@@ -88,7 +78,7 @@ export function useGuestAssignment(
         setGuestStatus(guestId, 'error')
       }
     },
-    [tables, setTables],
+    [eventId, tables, setTables],
   )
 
   return { assignGuest, removeGuest, statusMap }

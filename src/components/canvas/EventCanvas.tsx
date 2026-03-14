@@ -10,7 +10,7 @@ import type { CanvasElement, CanvasTool, SvgElement, TableElement, TableShape, T
 import type { Guest } from '@/types/guest'
 import type { WeddingEvent } from '@/types/event'
 import { InfiniteStage } from './InfiniteStage'
-import { CanvasToolbar } from './CanvasToolbar'
+import { CanvasToolbar, CanvasContextMenu } from './CanvasToolbar'
 import { SVGLibraryPanel } from './SVGLibraryPanel'
 import { SVGCanvasElement } from './SVGElement'
 import { TextCanvasElement } from './TextElement'
@@ -84,6 +84,11 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
   const [loading, setLoading] = useState(true)
   const [tableCounter, setTableCounter] = useState(0)
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
+
+  // Stable ref so native event handlers always see current elements without re-registering.
+  const elementsRef = useRef(elements)
+  useEffect(() => { elementsRef.current = elements }, [elements])
 
   // ── debounced save ─────────────────────────────────────────────────────────
   const saveElements = useRef(
@@ -347,6 +352,39 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
   function zoomOut() { setScale((s) => Math.max(0.1, parseFloat((s - ZOOM_STEP).toFixed(2)))) }
   function resetView() { setScale(DEFAULT_SCALE); setPosition({ x: 0, y: 0 }) }
 
+  // ── layer order ────────────────────────────────────────────────────────────
+  function reorder(fn: (arr: CanvasElement[], idx: number) => CanvasElement[]) {
+    if (!selectedId) return
+    setElements((prev) => {
+      const idx = prev.findIndex((el) => el.id === selectedId)
+      if (idx === -1) return prev
+      const updated = fn([...prev], idx)
+      saveElements(updated)
+      return updated
+    })
+  }
+
+  function bringToFront() {
+    reorder((arr, idx) => { const [el] = arr.splice(idx, 1); arr.push(el); return arr })
+  }
+  function bringForward() {
+    reorder((arr, idx) => {
+      if (idx === arr.length - 1) return arr
+      ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+      return arr
+    })
+  }
+  function sendBackward() {
+    reorder((arr, idx) => {
+      if (idx === 0) return arr
+      ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+      return arr
+    })
+  }
+  function sendToBack() {
+    reorder((arr, idx) => { const [el] = arr.splice(idx, 1); arr.unshift(el); return arr })
+  }
+
   // ── keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -360,6 +398,49 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
     return () => window.removeEventListener('keydown', onKey)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+
+  // ── context menu (right-click) ─────────────────────────────────────────────
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    function onContextMenu(e: MouseEvent) {
+      e.preventDefault()
+      const stage = stageRef.current
+      if (!stage) return
+
+      const pos = stage.getPointerPosition()
+      if (!pos) return
+      const shape = stage.getIntersection(pos)
+      if (!shape) { setContextMenu(null); return }
+
+      // Walk up to find a node whose id matches one of our elements.
+      let node: Konva.Node | null = shape
+      while (node && !elementsRef.current.find((el) => el.id === node!.id())) {
+        node = node.parent as Konva.Node | null
+      }
+      if (!node) { setContextMenu(null); return }
+
+      const rect = (container as HTMLDivElement).getBoundingClientRect()
+      const menuX = Math.min(e.clientX - rect.left, rect.width - 192)
+      const menuY = Math.min(e.clientY - rect.top, rect.height - 220)
+      setContextMenu({ x: menuX, y: menuY, elementId: node.id() })
+      setSelectedId(node.id())
+    }
+
+    function onMouseDown(e: MouseEvent) {
+      // Close context menu on any click that isn't inside it (handled by stopPropagation in the menu).
+      if ((e.target as HTMLElement).closest('[data-context-menu]')) return
+      setContextMenu(null)
+    }
+
+    container.addEventListener('contextmenu', onContextMenu)
+    window.addEventListener('mousedown', onMouseDown)
+    return () => {
+      container.removeEventListener('contextmenu', onContextMenu)
+      window.removeEventListener('mousedown', onMouseDown)
+    }
+  }, []) // registers once; reads elements via elementsRef
 
   // ── register node refs ─────────────────────────────────────────────────────
   function setNodeRef(id: string) {
@@ -512,6 +593,28 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
             )
           })()}
 
+          {/* context menu */}
+          {contextMenu && (() => {
+            const idx = elements.findIndex((el) => el.id === contextMenu.elementId)
+            if (idx === -1) return null
+            return (
+              <div data-context-menu>
+                <CanvasContextMenu
+                  x={contextMenu.x}
+                  y={contextMenu.y}
+                  layerIndex={idx}
+                  layerTotal={elements.length}
+                  onBringToFront={bringToFront}
+                  onBringForward={bringForward}
+                  onSendBackward={sendBackward}
+                  onSendToBack={sendToBack}
+                  onDelete={deleteSelected}
+                  onClose={() => setContextMenu(null)}
+                />
+              </div>
+            )
+          })()}
+
           {/* loading overlay — rendered inside container so containerRef is always in DOM */}
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 rounded-xl">
@@ -542,6 +645,25 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
           onDeleteGuest={handleDeleteGuest}
         />
       </div>
+
+      {/* ── status bar ── */}
+      {selectedElement && (
+        <div className="shrink-0 flex items-center gap-4 rounded-xl border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+          <span>X <strong className="text-foreground font-mono">{Math.round(selectedElement.x)}</strong></span>
+          <span>Y <strong className="text-foreground font-mono">{Math.round(selectedElement.y)}</strong></span>
+          <span>W <strong className="text-foreground font-mono">{Math.round(selectedElement.width)}</strong></span>
+          <span>H <strong className="text-foreground font-mono">{Math.round(selectedElement.height)}</strong></span>
+          <span className="ml-auto">
+            Layer{' '}
+            <strong className="text-foreground font-mono">
+              {elements.findIndex((el) => el.id === selectedId) + 1}
+            </strong>
+            {' '}/{' '}
+            <strong className="text-foreground font-mono">{elements.length}</strong>
+            <span className="ml-1 text-muted-foreground">(right-click to reorder)</span>
+          </span>
+        </div>
+      )}
     </div>
   )
 }

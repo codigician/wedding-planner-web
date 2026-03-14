@@ -1,4 +1,8 @@
 import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsDown,
+  ChevronsUp,
   CircleDashed,
   Hand,
   MousePointer2,
@@ -102,7 +106,6 @@ export function CanvasToolbar({
       <span className="text-xs text-muted-foreground font-medium">Tables:</span>
 
       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onAddTable('circle')} title="Add circle table">
-        {/* SVG circle icon */}
         <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5">
           <circle cx="8" cy="8" r="6" />
         </svg>
@@ -157,6 +160,91 @@ export function CanvasToolbar({
         <Trash2 className="size-4" />
         <span className="text-xs">Delete</span>
       </Button>
+    </div>
+  )
+}
+
+// ─── context menu ─────────────────────────────────────────────────────────────
+
+interface ContextMenuProps {
+  x: number
+  y: number
+  layerIndex: number
+  layerTotal: number
+  onBringToFront: () => void
+  onBringForward: () => void
+  onSendBackward: () => void
+  onSendToBack: () => void
+  onDelete: () => void
+  onClose: () => void
+}
+
+export function CanvasContextMenu({
+  x,
+  y,
+  layerIndex,
+  layerTotal,
+  onBringToFront,
+  onBringForward,
+  onSendBackward,
+  onSendToBack,
+  onDelete,
+  onClose,
+}: ContextMenuProps) {
+  function action(fn: () => void) {
+    return () => { fn(); onClose() }
+  }
+
+  const atTop = layerIndex === layerTotal - 1
+  const atBottom = layerIndex === 0
+
+  return (
+    <div
+      className="absolute z-50 min-w-[180px] rounded-lg border border-border bg-popover shadow-lg py-1 text-sm text-popover-foreground"
+      style={{ left: x, top: y }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium border-b border-border mb-1">
+        Layer {layerIndex + 1} of {layerTotal}
+      </div>
+
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
+        disabled={atTop}
+        onClick={action(onBringToFront)}
+      >
+        <ChevronsUp className="size-3.5 shrink-0" /> Bring to Front
+      </button>
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
+        disabled={atTop}
+        onClick={action(onBringForward)}
+      >
+        <ChevronUp className="size-3.5 shrink-0" /> Bring Forward
+      </button>
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
+        disabled={atBottom}
+        onClick={action(onSendBackward)}
+      >
+        <ChevronDown className="size-3.5 shrink-0" /> Send Backward
+      </button>
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
+        disabled={atBottom}
+        onClick={action(onSendToBack)}
+      >
+        <ChevronsDown className="size-3.5 shrink-0" /> Send to Back
+      </button>
+
+      <div className="my-1 border-t border-border" />
+
+      <button
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-destructive/10 text-destructive"
+        onClick={action(onDelete)}
+      >
+        <Trash2 className="size-3.5 shrink-0" /> Delete
+      </button>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, Loader2, Minus, Pencil, Plus, Search, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Minus, Pencil, Plus, Search, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -536,6 +536,7 @@ export function GuestSidebar({
   onEditGuest,
   onDeleteGuest,
 }: GuestSidebarProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const [search, setSearch] = useState('')
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
   const [deletingGuest, setDeletingGuest] = useState<Guest | null>(null)
@@ -606,7 +607,21 @@ export function GuestSidebar({
   )
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+    <aside className={cn(
+      'flex h-full shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm overflow-hidden transition-all duration-200',
+      collapsed ? 'w-8' : 'w-72',
+    )}>
+
+      {/* collapse toggle */}
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex items-center justify-center h-8 hover:bg-muted transition-colors border-b border-border shrink-0"
+        title={collapsed ? 'Expand guest panel' : 'Collapse guest panel'}
+      >
+        {collapsed ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </button>
+
+      {!collapsed && (<>
 
       {/* ── header ── */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
@@ -788,6 +803,8 @@ export function GuestSidebar({
           onConfirm={onDeleteGuest}
         />
       )}
+
+      </>)}
     </aside>
   )
 }

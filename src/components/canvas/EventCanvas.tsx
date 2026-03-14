@@ -83,6 +83,7 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [loading, setLoading] = useState(true)
   const [tableCounter, setTableCounter] = useState(0)
+  const [editingTextId, setEditingTextId] = useState<string | null>(null)
 
   // ── debounced save ─────────────────────────────────────────────────────────
   const saveElements = useRef(
@@ -437,11 +438,9 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
                       ref={setNodeRef(el.id) as React.Ref<Konva.Group>}
                       element={el}
                       isSelected={selectedId === el.id}
-                      stageRef={stageRef}
-                      stageScale={scale}
                       onSelect={setSelectedId}
                       onDragEnd={handleDragEnd}
-                      onChange={(id, updates) => updateElement(id, updates)}
+                      onStartEditing={setEditingTextId}
                     />
                   )
                 }
@@ -468,6 +467,50 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
             </Layer>
           </InfiniteStage>
           )} {/* end canvasWidth > 0 guard */}
+
+          {/* text editing overlay — plain HTML, positioned over the canvas element */}
+          {(() => {
+            const el = editingTextId
+              ? (elements.find((e) => e.id === editingTextId && e.type === 'text') as TextElement | undefined)
+              : undefined
+            if (!el) return null
+            const left = el.x * scale + position.x - (el.width * scale) / 2
+            const top = el.y * scale + position.y - (el.height * scale) / 2
+            return (
+              <textarea
+                key={el.id}
+                autoFocus
+                defaultValue={el.content}
+                onBlur={(e) => { updateElement(el.id, { content: e.target.value }); setEditingTextId(null) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { setEditingTextId(null); return }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); updateElement(el.id, { content: (e.target as HTMLTextAreaElement).value }); setEditingTextId(null) }
+                }}
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width: el.width * scale,
+                  minHeight: Math.max(30, el.height * scale),
+                  fontSize: el.fontSize * scale,
+                  fontFamily: el.fontFamily,
+                  fontWeight: el.bold ? 'bold' : 'normal',
+                  fontStyle: el.italic ? 'italic' : 'normal',
+                  color: el.fill,
+                  background: 'rgba(255,255,255,0.95)',
+                  border: '1.5px solid #7c3aed',
+                  borderRadius: 4,
+                  padding: '2px 4px',
+                  outline: 'none',
+                  resize: 'none',
+                  overflow: 'hidden',
+                  lineHeight: 1.4,
+                  zIndex: 20,
+                  textAlign: 'center',
+                }}
+              />
+            )
+          })()}
 
           {/* loading overlay — rendered inside container so containerRef is always in DOM */}
           {loading && (

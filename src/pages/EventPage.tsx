@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeftIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { VenueFloorPlanner } from '@/components/floor-plan'
+import { EventCanvas } from '@/components/canvas/EventCanvas'
 
 export default function EventPage() {
   const { eventId } = useParams<{ eventId: string }>()
@@ -22,7 +22,7 @@ export default function EventPage() {
         </Button>
       </div>
       <div className="flex-1 min-h-0">
-        <VenueFloorPlanner eventId={eventId} />
+        <EventCanvas eventId={eventId} />
       </div>
     </div>
   )

@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import type { AssignmentStatus } from '@/hooks/useGuestAssignment'
 import type { Guest, MealPreference, RsvpStatus } from '@/types/guest'
-import type { VenueTable } from '@/types/venue'
+import type { TableElement as VenueTable } from '@/types/canvas'
 
 // ─── props ────────────────────────────────────────────────────────────────────
 

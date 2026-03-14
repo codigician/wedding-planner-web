@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
-import { updateEventTables } from '@/lib/firebase/events'
-import type { VenueTable } from '@/types/venue'
+import { updateEventCanvas } from '@/lib/firebase/canvas'
+import type { CanvasElement, TableElement } from '@/types/canvas'
 
 export type AssignmentStatus = 'idle' | 'loading' | 'error'
 
@@ -17,13 +17,13 @@ interface UseGuestAssignmentReturn {
  * Manages guest-to-table assignments with Firestore persistence.
  *
  * Applies an **optimistic local update** immediately so the UI feels instant,
- * then persists the full updated tables array to the event document.
+ * then persists the full updated elements array to the event document.
  * If the write fails, the local state is rolled back.
  */
 export function useGuestAssignment(
   eventId: string,
-  tables: VenueTable[],
-  setTables: React.Dispatch<React.SetStateAction<VenueTable[]>>,
+  elements: CanvasElement[],
+  setElements: React.Dispatch<React.SetStateAction<CanvasElement[]>>,
   selectedTableId: string | null,
 ): UseGuestAssignmentReturn {
   const [statusMap, setStatusMap] = useState<Record<string, AssignmentStatus>>({})
@@ -35,51 +35,52 @@ export function useGuestAssignment(
     async (guestId: string) => {
       if (!selectedTableId) return
 
-      const snapshot = tables
-      const updated = tables.map((t) =>
-        t.id === selectedTableId && !t.assignedGuests.includes(guestId)
-          ? { ...t, assignedGuests: [...t.assignedGuests, guestId] }
-          : t,
+      const snapshot = elements
+      const updated = elements.map((el) =>
+        el.type === 'table' && el.id === selectedTableId && !el.assignedGuests.includes(guestId)
+          ? { ...el, assignedGuests: [...el.assignedGuests, guestId] }
+          : el,
       )
 
-      setTables(updated)
+      setElements(updated)
       setGuestStatus(guestId, 'loading')
 
       try {
-        await updateEventTables(eventId, updated)
+        await updateEventCanvas(eventId, updated)
         setGuestStatus(guestId, 'idle')
       } catch (err) {
         console.error('[useGuestAssignment] assignGuest failed:', err)
-        setTables(snapshot)
+        setElements(snapshot)
         setGuestStatus(guestId, 'error')
       }
     },
-    [eventId, selectedTableId, tables, setTables],
+    [eventId, selectedTableId, elements, setElements],
   )
 
   const removeGuest = useCallback(
     async (tableId: string, guestId: string) => {
-      const snapshot = tables
-      const updated = tables.map((t) =>
-        t.id === tableId
-          ? { ...t, assignedGuests: t.assignedGuests.filter((id) => id !== guestId) }
-          : t,
+      const snapshot = elements
+      const updated = elements.map((el) =>
+        el.type === 'table' && el.id === tableId
+          ? { ...el, assignedGuests: (el as TableElement).assignedGuests.filter((id) => id !== guestId) }
+          : el,
       )
 
-      setTables(updated)
+      setElements(updated)
       setGuestStatus(guestId, 'loading')
 
       try {
-        await updateEventTables(eventId, updated)
+        await updateEventCanvas(eventId, updated)
         setGuestStatus(guestId, 'idle')
       } catch (err) {
         console.error('[useGuestAssignment] removeGuest failed:', err)
-        setTables(snapshot)
+        setElements(snapshot)
         setGuestStatus(guestId, 'error')
       }
     },
-    [eventId, tables, setTables],
+    [eventId, elements, setElements],
   )
 
   return { assignGuest, removeGuest, statusMap }
 }
+

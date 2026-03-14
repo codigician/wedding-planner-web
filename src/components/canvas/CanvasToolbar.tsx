@@ -25,13 +25,11 @@ interface CanvasToolbarProps {
   eventName?: string
   activeTool: CanvasTool
   scale: number
-  hasSelection: boolean
   onToolChange: (tool: CanvasTool) => void
   onAddTable: (shape: TableShape) => void
   onZoomIn: () => void
   onZoomOut: () => void
   onResetView: () => void
-  onDeleteSelected: () => void
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -66,13 +64,11 @@ export function CanvasToolbar({
   eventName,
   activeTool,
   scale,
-  hasSelection,
   onToolChange,
   onAddTable,
   onZoomIn,
   onZoomOut,
   onResetView,
-  onDeleteSelected,
 }: CanvasToolbarProps) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 shadow-sm">
@@ -146,20 +142,6 @@ export function CanvasToolbar({
         <RotateCcw className="size-4" />
       </Button>
 
-      <Separator orientation="vertical" className="h-6" />
-
-      {/* ── delete ── */}
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-1.5"
-        disabled={!hasSelection}
-        onClick={onDeleteSelected}
-        title="Delete selected (Del)"
-      >
-        <Trash2 className="size-4" />
-        <span className="text-xs">Delete</span>
-      </Button>
     </div>
   )
 }

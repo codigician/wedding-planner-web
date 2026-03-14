@@ -462,13 +462,11 @@ export function EventCanvas({ eventId }: EventCanvasProps) {
         eventName={event?.name}
         activeTool={activeTool}
         scale={scale}
-        hasSelection={!!selectedId}
         onToolChange={setActiveTool}
         onAddTable={addTable}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onResetView={resetView}
-        onDeleteSelected={deleteSelected}
       />
 
       {/* ── canvas area + sidebar ── */}
